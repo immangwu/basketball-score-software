@@ -249,12 +249,14 @@ def parse_clock(s):
 
 def format_clock(seconds):
     seconds = max(0.0, float(seconds))
+    tenths = int((seconds % 1) * 10)
     if seconds < 60.0:
-        tenths = int((seconds % 1) * 10)
+        # Last minute: SS.t
         return f"{int(seconds):02d}.{tenths}"
+    # Normal play: MM:SS.t
     m = int(seconds) // 60
     s = int(seconds) % 60
-    return f"{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}.{tenths}"
 
 # ─────────────────────────────────────────────
 # Header
@@ -740,8 +742,7 @@ if state.get("game_over"):
     </div>
     """, unsafe_allow_html=True)
 
-# Auto-refresh: fast (0.1s) in last minute for tenths display, else 1s
+# Auto-refresh: 0.1s always for smooth per-second updates and tenths in last minute
 if state.get("clock_running") and not state.get("game_over"):
-    game_secs = parse_clock(state.get("game_clock", "00:00"))
-    time.sleep(0.1 if game_secs < 60 else 1)
+    time.sleep(0.1)
     st.rerun()
