@@ -124,3 +124,12 @@ Use the pages above to navigate.
 - **8 seconds** to half-court
 - **3 seconds** in the paint
 """)
+
+st.markdown("""
+<div style="text-align:center; padding: 1.5rem 0 0.5rem 0; border-top: 1px solid #1a1a2e; margin-top: 1rem;">
+  <span style="color:#444; font-size:0.78rem; letter-spacing:0.12em; text-transform:uppercase;">
+    Developed by <span style="color:#f5a623; font-weight:700;">HIVE</span> &nbsp;·&nbsp;
+    Sri Ramakrishna Institute of Technology
+  </span>
+</div>
+""", unsafe_allow_html=True)

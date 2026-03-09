@@ -742,6 +742,15 @@ if state.get("game_over"):
     </div>
     """, unsafe_allow_html=True)
 
+st.markdown("""
+<div style="text-align:center; padding: 1rem 0 0.3rem 0; border-top: 1px solid #1a1a2e; margin-top: 0.5rem;">
+  <span style="color:#444; font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase;">
+    Developed by <span style="color:#f5a623; font-weight:700;">HIVE</span> &nbsp;·&nbsp;
+    Sri Ramakrishna Institute of Technology
+  </span>
+</div>
+""", unsafe_allow_html=True)
+
 # Auto-refresh: 0.1s always for smooth per-second updates and tenths in last minute
 if state.get("clock_running") and not state.get("game_over"):
     time.sleep(0.1)
