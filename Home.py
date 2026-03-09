@@ -40,44 +40,34 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown("""
     <div style="background:linear-gradient(135deg,#0a1a3a,#0d0d20); border:2px solid #1a3a6b;
-         border-radius:20px; padding:2.5rem; text-align:center; cursor:pointer;
+         border-radius:20px; padding:2.5rem 2.5rem 1.5rem 2.5rem; text-align:center;
          box-shadow: 0 0 30px rgba(26,58,107,0.3);">
       <div style="font-size:4rem; margin-bottom:1rem;">🎮</div>
       <div style="font-family:Orbitron,monospace; font-size:1.5rem; font-weight:900; color:#6699ff; letter-spacing:0.1em;">JURY PANEL</div>
       <div style="color:#666; margin-top:0.8rem; font-size:0.9rem; line-height:1.6;">
-        Full game control for referees & scorekeepers.<br>
+        Full game control for referees &amp; scorekeepers.<br>
         Score buttons, foul tracking, clock management,<br>
-        timeout control, violations & more.
-      </div>
-      <div style="margin-top:1.5rem;">
-        <span style="background:#1a3a6b; color:#6699ff; padding:8px 24px; border-radius:20px;
-             font-weight:700; font-size:0.9rem; letter-spacing:0.08em;">
-          → Open Jury Panel
-        </span>
+        timeout control, violations &amp; more.
       </div>
     </div>
     """, unsafe_allow_html=True)
+    st.page_link("pages/1_🏀_Jury_Panel.py", label="→ Open Jury Panel", use_container_width=True)
 
 with col2:
     st.markdown("""
     <div style="background:linear-gradient(135deg,#0a2a1a,#0d1a0d); border:2px solid #1a5c1a;
-         border-radius:20px; padding:2.5rem; text-align:center; cursor:pointer;
+         border-radius:20px; padding:2.5rem 2.5rem 1.5rem 2.5rem; text-align:center;
          box-shadow: 0 0 30px rgba(26,92,26,0.3);">
       <div style="font-size:4rem; margin-bottom:1rem;">📺</div>
       <div style="font-family:Orbitron,monospace; font-size:1.5rem; font-weight:900; color:#00ff88; letter-spacing:0.1em;">VIEWER DISPLAY</div>
       <div style="color:#666; margin-top:0.8rem; font-size:0.9rem; line-height:1.6;">
-        Live scoreboard for audience & display screens.<br>
+        Live scoreboard for audience &amp; display screens.<br>
         Real-time score, clock, shot clock, possession,<br>
-        fouls, timeouts & event ticker.
-      </div>
-      <div style="margin-top:1.5rem;">
-        <span style="background:#1a5c1a; color:#00ff88; padding:8px 24px; border-radius:20px;
-             font-weight:700; font-size:0.9rem; letter-spacing:0.08em;">
-          → Open Viewer Display
-        </span>
+        fouls, timeouts &amp; event ticker.
       </div>
     </div>
     """, unsafe_allow_html=True)
+    st.page_link("pages/2_📺_Viewer_Display.py", label="→ Open Viewer Display", use_container_width=True)
 
 st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 st.markdown("""
