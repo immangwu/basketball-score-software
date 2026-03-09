@@ -196,12 +196,31 @@ section[data-testid="stSidebar"] { background: #0a0a1a !important; }
 # ─────────────────────────────────────────────
 # State helpers
 # ─────────────────────────────────────────────
+DEFAULT_STATE = {
+    "team_a": {"name": "Team A", "score": 0, "fouls": 0, "timeouts": 3, "color": "#1a3a6b"},
+    "team_b": {"name": "Team B", "score": 0, "fouls": 0, "timeouts": 3, "color": "#8b1a1a"},
+    "quarter": 1, "game_clock": "10:00", "shot_clock": 24,
+    "period_minutes": 10, "clock_running": False, "game_started": False,
+    "game_over": False, "overtime": False, "possession": "A",
+    "last_action": "", "events": [], "players_a": [], "players_b": [],
+    "fouls_limit": 5, "team_fouls_limit": 10, "timeouts_per_half": 3,
+    "shot_clock_reset": 24, "last_updated": 0
+}
+
 def load_state():
     try:
         with open(STATE_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+        # Ensure required keys exist (merge with defaults)
+        state = dict(DEFAULT_STATE)
+        state.update(data)
+        if "team_a" not in data:
+            state["team_a"] = dict(DEFAULT_STATE["team_a"])
+        if "team_b" not in data:
+            state["team_b"] = dict(DEFAULT_STATE["team_b"])
+        return state
     except:
-        return {}
+        return dict(DEFAULT_STATE)
 
 def save_state(state):
     state["last_updated"] = time.time()
