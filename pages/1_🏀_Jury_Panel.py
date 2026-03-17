@@ -4,7 +4,8 @@ import os
 import time
 from datetime import datetime
 
-STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "state.json")
+STATE_FILE  = os.path.join(os.path.dirname(__file__), "..", "state.json")
+STATUS_FILE = os.path.join(os.path.dirname(__file__), "..", "nodemcu_status.json")
 
 st.set_page_config(
     page_title="🏀 Basketball Jury Panel",
@@ -274,6 +275,62 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 state = load_state()
+
+# ─────────────────────────────────────────────
+# NODEMCU CONNECTION INDICATOR
+# ─────────────────────────────────────────────
+def nodemcu_status():
+    try:
+        with open(STATUS_FILE) as f:
+            data = json.load(f)
+        last_ping = data.get("last_ping", 0)
+        ip        = data.get("ip", "")
+        age       = time.time() - last_ping
+        if age < 5:
+            return "connected", ip, age
+        elif age < 15:
+            return "weak", ip, age
+        else:
+            return "offline", ip, age
+    except Exception:
+        return "offline", "", 0
+
+_nm_state, _nm_ip, _nm_age = nodemcu_status()
+
+if _nm_state == "connected":
+    _dot   = "🟢"
+    _label = f"NodeMCU Connected"
+    _sub   = f"IP {_nm_ip} · last seen {_nm_age:.0f}s ago"
+    _color = "#00e676"
+    _bg    = "rgba(0,230,118,0.08)"
+    _border= "#00e676"
+elif _nm_state == "weak":
+    _dot   = "🟡"
+    _label = "NodeMCU Signal Weak"
+    _sub   = f"IP {_nm_ip} · last seen {_nm_age:.0f}s ago"
+    _color = "#ffd600"
+    _bg    = "rgba(255,214,0,0.08)"
+    _border= "#ffd600"
+else:
+    _dot   = "🔴"
+    _label = "NodeMCU Offline"
+    _sub   = "Start nodemcu_server.py and connect NodeMCU to hotspot"
+    _color = "#ff5252"
+    _bg    = "rgba(255,82,82,0.08)"
+    _border= "#ff5252"
+
+st.markdown(f"""
+<div style="display:flex; align-items:center; gap:0.8rem; background:{_bg};
+     border:1px solid {_border}; border-radius:10px; padding:0.45rem 1rem;
+     margin-bottom:0.6rem;">
+  <span style="font-size:1.1rem;">{_dot}</span>
+  <div>
+    <span style="color:{_color}; font-weight:700; font-size:0.85rem;
+      letter-spacing:0.08em; text-transform:uppercase;">{_label}</span>
+    <span style="color:#666; font-size:0.72rem; margin-left:0.6rem;">{_sub}</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # TICK CLOCK (time-based, runs on every page load)
