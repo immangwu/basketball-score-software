@@ -258,9 +258,9 @@ void scanMatrix() {
   digitalWrite(PIN_OE, HIGH);
 
   for (int b = 0; b < BYTES_PER_ROW; b++)
-    shiftByte(fb[scanStep][b]);
+    shiftByte(~fb[scanStep][b]);
   for (int b = 0; b < BYTES_PER_ROW; b++)
-    shiftByte(fb[scanStep+8][b]);
+    shiftByte(~fb[scanStep+8][b]);
 
   digitalWrite(PIN_STB, HIGH);
   delayMicroseconds(1);
