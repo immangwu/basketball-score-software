@@ -87,9 +87,23 @@ const int   SERVER_PORT = 8765;
 // fb[r][0]=cols 0–7, [1]=cols 8–15, [2]=cols 16–23, [3]=cols 24–31
 byte fb[ROWS][BYTES_PER_ROW];
 
-// ── 3×5 pixel font (digits 0–9) ──────────────────────────────────────
-// 5 bytes per digit, bits 7-5 = 3 pixel columns
-const byte FONT[10][5] = {
+// ── 5×7 font for SCORES (big, fills rows 0–6) ────────────────────────
+// 7 rows × 5 cols. Bits 7-3 of each byte = 5 pixel columns.
+const byte FONT5x7[10][7] = {
+  {0b11111000,0b10001000,0b10001000,0b10001000,0b10001000,0b10001000,0b11111000}, // 0
+  {0b00100000,0b01100000,0b00100000,0b00100000,0b00100000,0b00100000,0b01110000}, // 1
+  {0b11111000,0b00001000,0b00001000,0b11111000,0b10000000,0b10000000,0b11111000}, // 2
+  {0b11111000,0b00001000,0b00001000,0b11111000,0b00001000,0b00001000,0b11111000}, // 3
+  {0b10001000,0b10001000,0b10001000,0b11111000,0b00001000,0b00001000,0b00001000}, // 4
+  {0b11111000,0b10000000,0b10000000,0b11111000,0b00001000,0b00001000,0b11111000}, // 5
+  {0b11111000,0b10000000,0b10000000,0b11111000,0b10001000,0b10001000,0b11111000}, // 6
+  {0b11111000,0b00001000,0b00010000,0b00100000,0b01000000,0b01000000,0b01000000}, // 7
+  {0b11111000,0b10001000,0b10001000,0b11111000,0b10001000,0b10001000,0b11111000}, // 8
+  {0b11111000,0b10001000,0b10001000,0b11111000,0b00001000,0b00001000,0b11111000}, // 9
+};
+
+// ── 3×5 font for CLOCK (small, rows 9–13) ────────────────────────────
+const byte FONT3x5[10][5] = {
   {0b11100000,0b10100000,0b10100000,0b10100000,0b11100000}, // 0
   {0b01000000,0b11000000,0b01000000,0b01000000,0b11100000}, // 1
   {0b11100000,0b00100000,0b11100000,0b10000000,0b11100000}, // 2
@@ -197,102 +211,88 @@ void renderBoard() {
   clearFB();
 
   if (gameOver) {
-    // Blink scores
     if ((millis()/500) % 2) {
-      drawDigit(scoreA/10, 0, 0);
-      drawDigit(scoreA%10, 0, 4);
-      drawDigit(scoreB/10, 0, 8);
-      drawDigit(scoreB%10, 0, 12);
+      drawBigDigit(scoreA/10, 0, 2);
+      drawBigDigit(scoreA%10, 0, 8);
+      drawBigDigit(scoreB/10, 0, 17);
+      drawBigDigit(scoreB%10, 0, 23);
     }
-    // "FIN" rows 7-13
-    drawLetter('F', 7, 0);
-    drawLetter('I', 7, 5);
-    drawLetter('N', 7, 10);
+    // "END" centre rows 9–13
+    drawSmallDigit(3, 9, 12); // borrow digit shape for visual indicator
+    for (int c=8; c<24; c++) setPixel(9,c);  // solid bar = END indicator
     return;
   }
 
   // ── 32×16 Layout ─────────────────────────────────────────────────
-  //  Cols  0–13 : Team A score (large 5×5 digits, centred in left half)
-  //  Col  14–17 : Centre divider + clock colon
-  //  Cols 18–31 : Team B score (large 5×5 digits, centred in right half)
-  //  Rows  0– 5 : Scores
-  //  Row   6    : Separator line
-  //  Rows  7–11 : Clock (MM:SS or SS.t)
-  //  Rows 12–15 : Quarter + possession
+  //  Rows 0–6  : Scores  (5×7 big font)
+  //    Team A: cols 2–12  (tens at 2, units at 8)
+  //    Divider: col 14–15 (vertical line)
+  //    Team B: cols 17–27 (tens at 17, units at 23)
+  //  Row  7    : blank gap
+  //  Rows 8–12 : Clock   (3×5 small font, centred)
+  //  Rows 13–15: Quarter (left) + Possession dot (right)
 
-  // Team A score — big digits at cols 0,4 (tens,units) rows 0–5
-  drawDigit(scoreA/10, 0, 1);
-  drawDigit(scoreA%10, 0, 6);
+  // ── Scores (5×7 big font) ────────────────────────────────────────
+  drawBigDigit(scoreA/10, 0, 2);
+  drawBigDigit(scoreA%10, 0, 8);
 
-  // Vertical divider cols 12–13
-  for (int r=0; r<12; r++) { setPixel(r,12); }
+  // Centre vertical divider
+  for (int r=0; r<13; r++) { setPixel(r,14); setPixel(r,15); }
 
-  // Team B score — big digits at cols 18,23 rows 0–5
-  drawDigit(scoreB/10, 0, 18);
-  drawDigit(scoreB%10, 0, 23);
+  drawBigDigit(scoreB/10, 0, 17);
+  drawBigDigit(scoreB%10, 0, 23);
 
-  // ── Row 6: Horizontal separator ──────────────────────────────────
-  for (int c=0; c<COLS; c++) setPixel(6,c);
-
-  // ── Rows 7–11: Clock centred ─────────────────────────────────────
+  // ── Clock (3×5 small font) ────────────────────────────────────────
   if (clockSecs < 60) {
-    // SS.t — 2 digits centred (cols 10–17)
-    drawDigit(clockSecs/10, 7, 11);
-    drawDigit(clockSecs%10, 7, 16);
-    // tenths bar on row 12
-    for (int d=0; d<clockTen; d++) setPixel(12, 12+d);
+    // SS  centred at cols 13–19
+    drawSmallDigit(clockSecs/10, 8, 13);
+    drawSmallDigit(clockSecs%10, 8, 17);
+    // tenths dots
+    for (int d=0; d<clockTen; d++) setPixel(13, 13+d);
   } else {
     int m = clockSecs/60, s = clockSecs%60;
-    // MM:SS — 4 digits + colon (cols 7–24)
-    drawDigit(m/10, 7,  7);
-    drawDigit(m%10, 7, 12);
-    if ((millis()/500)%2) { setPixel(8,17); setPixel(10,17); }
-    drawDigit(s/10, 7, 18);
-    drawDigit(s%10, 7, 23);
+    // MM:SS  cols 5–26
+    drawSmallDigit(m/10, 8,  5);
+    drawSmallDigit(m%10, 8,  9);
+    if ((millis()/500)%2) { setPixel(9,13); setPixel(11,13); }
+    drawSmallDigit(s/10, 8, 16);
+    drawSmallDigit(s%10, 8, 20);
   }
 
-  // ── Rows 12–15: Quarter label (left) + possession dot (right) ────
-  // "Q" at col 0
+  // ── Quarter + possession (rows 13–15) ────────────────────────────
+  int q = constrain(quarter,1,9);
+  // "Q" marker
   setPixel(13,0); setPixel(13,1); setPixel(13,2);
   setPixel(14,0);                 setPixel(14,2);
   setPixel(15,0); setPixel(15,1); setPixel(15,3);
-  // Quarter digit
-  int q = constrain(quarter,1,9);
-  for (int r=0; r<5; r++) {
-    byte px=(FONT[q][r]>>5)&0x07;
+  // Quarter digit (3×5, rows 13–15, col 4)
+  for (int r=0; r<3; r++) {
+    byte px=(FONT3x5[q][r+1]>>5)&0x07;
     for (int c=0; c<3; c++)
-      if (px&(1<<(2-c))) setPixel(11+r, 5+c);
+      if (px&(1<<(2-c))) setPixel(13+r, 4+c);
   }
-  // Possession: left dot = A, right dot = B
-  if      (poss=='A') { setPixel(14,27); setPixel(15,27); }
+  // Possession dot
+  if      (poss=='A') { setPixel(14,28); setPixel(15,28); }
   else if (poss=='B') { setPixel(14,30); setPixel(15,30); }
 }
 
-// ── Draw 3×5 digit at (row, col) ──────────────────────────────────────
-void drawDigit(int d, int row, int col) {
+// ── Draw 5×7 big digit (for scores) ──────────────────────────────────
+void drawBigDigit(int d, int row, int col) {
   d = constrain(d,0,9);
-  for (int r=0; r<5; r++) {
-    byte px = (FONT[d][r] >> 5) & 0x07;
-    for (int c=0; c<3; c++)
-      if (px & (1<<(2-c))) setPixel(row+r, col+c);
+  for (int r=0; r<7; r++) {
+    byte px = (FONT5x7[d][r] >> 3) & 0x1F;  // 5 bits
+    for (int c=0; c<5; c++)
+      if (px & (1<<(4-c))) setPixel(row+r, col+c);
   }
 }
 
-// ── Simple 3-wide capital letters for FIN ─────────────────────────────
-const byte LETTER_F[5] = {0b11100000,0b10000000,0b11000000,0b10000000,0b10000000};
-const byte LETTER_I[5] = {0b11100000,0b01000000,0b01000000,0b01000000,0b11100000};
-const byte LETTER_N[5] = {0b10100000,0b11100000,0b11100000,0b10100000,0b10100000};
-
-void drawLetter(char ch, int row, int col) {
-  const byte* src = nullptr;
-  if (ch=='F') src=LETTER_F;
-  else if (ch=='I') src=LETTER_I;
-  else if (ch=='N') src=LETTER_N;
-  if (!src) return;
+// ── Draw 3×5 small digit (for clock) ─────────────────────────────────
+void drawSmallDigit(int d, int row, int col) {
+  d = constrain(d,0,9);
   for (int r=0; r<5; r++) {
-    byte px=(src[r]>>5)&0x07;
+    byte px = (FONT3x5[d][r] >> 5) & 0x07;
     for (int c=0; c<3; c++)
-      if (px&(1<<(2-c))) setPixel(row+r,col+c);
+      if (px & (1<<(2-c))) setPixel(row+r, col+c);
   }
 }
 
