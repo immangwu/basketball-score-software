@@ -72,19 +72,20 @@ const int   SERVER_PORT = 8765;
 #define PIN_OE   D1   // GPIO5  → OE  (Output Enable, active LOW)
 #define PIN_A    D2   // GPIO4  → A   (Row address bit 0)
 #define PIN_B    D3   // GPIO0  → B   (Row address bit 1)
+#define PIN_C    D4   // GPIO2  → C   (Row address bit 2) — Panel pin 10 (L) → D4
 #define PIN_CLK  D5   // GPIO14 → F   (Clock)
 #define PIN_STB  D8   // GPIO15 → S   (Strobe / Latch)
 #define PIN_DATA D7   // GPIO13 → R   (Serial data)
 
 // ── Matrix dimensions ─────────────────────────────────────────────────
-#define COLS        16
-#define ROWS        16
-#define SCAN_LINES   4   // 1/4 scan
+#define COLS          32   // 32 columns
+#define ROWS          16
+#define BYTES_PER_ROW  4   // 32 cols / 8 = 4 bytes per row
+#define SCAN_LINES     8   // 1/8 scan
 
-// ── Frame buffer [row][col_byte] — 2 bytes × 16 rows ─────────────────
-// fb[r][0] = columns 0–7,  fb[r][1] = columns 8–15
-// Bit 7 of [0] = col 0 (leftmost),  Bit 0 of [1] = col 15 (rightmost)
-byte fb[ROWS][2];
+// ── Frame buffer: [row][4 bytes for 32 columns] ───────────────────────
+// fb[r][0]=cols 0–7, [1]=cols 8–15, [2]=cols 16–23, [3]=cols 24–31
+byte fb[ROWS][BYTES_PER_ROW];
 
 // ── 3×5 pixel font (digits 0–9) ──────────────────────────────────────
 // 5 bytes per digit, bits 7-5 = 3 pixel columns
@@ -118,11 +119,12 @@ void setup() {
   pinMode(PIN_OE,   OUTPUT);
   pinMode(PIN_A,    OUTPUT);
   pinMode(PIN_B,    OUTPUT);
+  pinMode(PIN_C,    OUTPUT);
   pinMode(PIN_CLK,  OUTPUT);
   pinMode(PIN_STB,  OUTPUT);
   pinMode(PIN_DATA, OUTPUT);
 
-  digitalWrite(PIN_OE, HIGH);    // disable until ready
+  digitalWrite(PIN_OE, HIGH);
   digitalWrite(PIN_STB, LOW);
 
   Serial.println("\n========================================");
@@ -130,8 +132,9 @@ void setup() {
   Serial.println("  Sri Ramakrishna Institute of Technology");
   Serial.println("========================================");
 
-  // Boot: fill display then clear
-  for (int r=0; r<ROWS; r++) { fb[r][0]=0xFF; fb[r][1]=0xFF; }
+  // Boot: fill all LEDs then clear
+  for (int r=0; r<ROWS; r++)
+    for (int b=0; b<BYTES_PER_ROW; b++) fb[r][b]=0xFF;
   for (int i=0; i<200; i++) { scanMatrix(); delay(1); }
   clearFB();
 
@@ -149,40 +152,31 @@ void loop() {
   if (now - lastPing  >= 2000) { lastPing=now;  sendPing(); }
 }
 
-// ── 1/4 scan matrix refresh ───────────────────────────────────────────
-// Each call handles one scan step (4 rows at a time)
+// ── 1/8 scan matrix refresh — 16×32 panel ────────────────────────────
 byte scanStep = 0;
 
 void scanMatrix() {
   static unsigned long t = 0;
-  if (micros() - t < 2000) return;   // ~500Hz total (2ms per step × 4 steps)
+  if (micros() - t < 1000) return;   // ~125Hz total (1ms × 8 steps)
   t = micros();
 
-  // Disable output while shifting
   digitalWrite(PIN_OE, HIGH);
 
-  // For 1/4 scan: step drives rows: scanStep, scanStep+4, scanStep+8, scanStep+12
-  // Shift order (last shifted = first in chain = closest to output):
-  // row+12 high, row+12 low, row+8 high, row+8 low, row+4 high, row+4 low, row high, row low
-  shiftByte(fb[scanStep+12][1]);
-  shiftByte(fb[scanStep+12][0]);
-  shiftByte(fb[scanStep+ 8][1]);
-  shiftByte(fb[scanStep+ 8][0]);
-  shiftByte(fb[scanStep+ 4][1]);
-  shiftByte(fb[scanStep+ 4][0]);
-  shiftByte(fb[scanStep   ][1]);
-  shiftByte(fb[scanStep   ][0]);
+  // 1/8 scan: step drives row[scanStep] (top) and row[scanStep+8] (bottom)
+  // Each row = 4 bytes (32 cols). Shift bottom row first, then top.
+  for (int b = BYTES_PER_ROW-1; b >= 0; b--)
+    shiftByte(fb[scanStep+8][b]);
+  for (int b = BYTES_PER_ROW-1; b >= 0; b--)
+    shiftByte(fb[scanStep][b]);
 
-  // Strobe/latch pulse
   digitalWrite(PIN_STB, HIGH);
   delayMicroseconds(1);
   digitalWrite(PIN_STB, LOW);
 
-  // Set row address (A = bit0, B = bit1)
-  digitalWrite(PIN_A, scanStep & 1);
+  digitalWrite(PIN_A, (scanStep >> 0) & 1);
   digitalWrite(PIN_B, (scanStep >> 1) & 1);
+  digitalWrite(PIN_C, (scanStep >> 2) & 1);
 
-  // Enable output
   digitalWrite(PIN_OE, LOW);
 
   scanStep = (scanStep + 1) % SCAN_LINES;
@@ -217,54 +211,61 @@ void renderBoard() {
     return;
   }
 
-  // ── Rows 0–5: Scores ─────────────────────────────────────────────
-  // Team A (cols 0–7): tens at col 0, units at col 4
-  drawDigit(scoreA/10, 0, 0);
-  drawDigit(scoreA%10, 0, 4);
-  // Team B (cols 8–15): tens at col 8, units at col 12
-  drawDigit(scoreB/10, 0, 8);
-  drawDigit(scoreB%10, 0, 12);
+  // ── 32×16 Layout ─────────────────────────────────────────────────
+  //  Cols  0–13 : Team A score (large 5×5 digits, centred in left half)
+  //  Col  14–17 : Centre divider + clock colon
+  //  Cols 18–31 : Team B score (large 5×5 digits, centred in right half)
+  //  Rows  0– 5 : Scores
+  //  Row   6    : Separator line
+  //  Rows  7–11 : Clock (MM:SS or SS.t)
+  //  Rows 12–15 : Quarter + possession
 
-  // ── Row 6: Centre separator ───────────────────────────────────────
-  fb[6][0] = 0b10001000;
-  fb[6][1] = 0b10001000;
+  // Team A score — big digits at cols 0,4 (tens,units) rows 0–5
+  drawDigit(scoreA/10, 0, 1);
+  drawDigit(scoreA%10, 0, 6);
 
-  // ── Rows 7–11: Clock ──────────────────────────────────────────────
+  // Vertical divider cols 12–13
+  for (int r=0; r<12; r++) { setPixel(r,12); }
+
+  // Team B score — big digits at cols 18,23 rows 0–5
+  drawDigit(scoreB/10, 0, 18);
+  drawDigit(scoreB%10, 0, 23);
+
+  // ── Row 6: Horizontal separator ──────────────────────────────────
+  for (int c=0; c<COLS; c++) setPixel(6,c);
+
+  // ── Rows 7–11: Clock centred ─────────────────────────────────────
   if (clockSecs < 60) {
-    // SS.t — seconds 2 digits, tenths bar
-    drawDigit(clockSecs/10, 7, 1);
-    drawDigit(clockSecs%10, 7, 6);
-    // Tenths: dots on row 12 (0–9 pixels from left)
-    for (int d=0; d<clockTen; d++) setPixel(12, d+1);
+    // SS.t — 2 digits centred (cols 10–17)
+    drawDigit(clockSecs/10, 7, 11);
+    drawDigit(clockSecs%10, 7, 16);
+    // tenths bar on row 12
+    for (int d=0; d<clockTen; d++) setPixel(12, 12+d);
   } else {
-    // MM:SS — minutes single digit + colon + seconds 2 digits
     int m = clockSecs/60, s = clockSecs%60;
-    drawDigit(m%10, 7, 0);
-    // colon blink
-    if ((millis()/500)%2) { setPixel(8,4); setPixel(10,4); }
-    drawDigit(s/10, 7, 6);
-    drawDigit(s%10, 7, 11);
+    // MM:SS — 4 digits + colon (cols 7–24)
+    drawDigit(m/10, 7,  7);
+    drawDigit(m%10, 7, 12);
+    if ((millis()/500)%2) { setPixel(8,17); setPixel(10,17); }
+    drawDigit(s/10, 7, 18);
+    drawDigit(s%10, 7, 23);
   }
 
-  // ── Rows 13–15: Quarter ───────────────────────────────────────────
-  // "Q" 3×3 then quarter digit
-  // Q shape
-  setPixel(13,0); setPixel(13,1);
-  setPixel(14,0);               setPixel(14,2);
-  setPixel(15,0); setPixel(15,1); setPixel(15,2);
-  // Quarter number (3×5 font, small — use rows 13–15 only, 3 rows)
+  // ── Rows 12–15: Quarter label (left) + possession dot (right) ────
+  // "Q" at col 0
+  setPixel(13,0); setPixel(13,1); setPixel(13,2);
+  setPixel(14,0);                 setPixel(14,2);
+  setPixel(15,0); setPixel(15,1); setPixel(15,3);
+  // Quarter digit
   int q = constrain(quarter,1,9);
-  byte qrows[3] = { FONT[q][1], FONT[q][2], FONT[q][3] }; // middle 3 rows of digit
-  for (int r=0; r<3; r++) {
-    byte px = (qrows[r] >> 5) & 0x07;
-    for (int c=0; c<3; c++) {
-      if (px & (1<<(2-c))) setPixel(13+r, 4+c);
-    }
+  for (int r=0; r<5; r++) {
+    byte px=(FONT[q][r]>>5)&0x07;
+    for (int c=0; c<3; c++)
+      if (px&(1<<(2-c))) setPixel(11+r, 5+c);
   }
-
-  // ── Row 15: Possession dot ────────────────────────────────────────
-  if      (poss=='A') { setPixel(15,8);  setPixel(15,9);  }
-  else if (poss=='B') { setPixel(15,13); setPixel(15,14); }
+  // Possession: left dot = A, right dot = B
+  if      (poss=='A') { setPixel(14,27); setPixel(15,27); }
+  else if (poss=='B') { setPixel(14,30); setPixel(15,30); }
 }
 
 // ── Draw 3×5 digit at (row, col) ──────────────────────────────────────
@@ -301,7 +302,7 @@ void setPixel(int row, int col) {
   fb[row][col/8] |= (0x80 >> (col%8));
 }
 
-void clearFB() { memset(fb,0,sizeof(fb)); }
+void clearFB() { memset(fb, 0, sizeof(fb)); }
 
 // ── Fetch state from server ───────────────────────────────────────────
 void fetchState() {
