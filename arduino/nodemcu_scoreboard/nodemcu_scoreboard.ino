@@ -57,9 +57,10 @@
   LIBRARY: ArduinoJson v6.x (Sketch → Manage Libraries → ArduinoJson)
 */
 
-#include <WiFi.h>
-#include <HTTPClient.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
+#include <WiFiClient.h>
 
 // ── WiFi & Server ─────────────────────────────────────────────────────
 const char* WIFI_SSID   = "HIVE";
@@ -67,13 +68,13 @@ const char* WIFI_PASS   = "hive@srit2024";
 const char* SERVER_IP   = "172.16.50.85";
 const int   SERVER_PORT = 8765;
 
-// ── HUB12 Pins — ESP32 GPIO numbers (matched to board photo labels) ──
-#define PIN_OE    4   // GPIO4  → OE  (Output Enable, active LOW)
-#define PIN_A    16   // GPIO16 → A   (Row address bit 0)
-#define PIN_B    17   // GPIO17 → B   (Row address bit 1)
-#define PIN_CLK  18   // GPIO18 → F   (Clock — VSPI CLK)
-#define PIN_STB   5   // GPIO5  → S   (Strobe / Latch)
-#define PIN_DATA 23   // GPIO23 → R   (Serial data — VSPI MOSI)
+// ── HUB12 Pins — NodeMCU (matched to board photo labels) ────────────
+#define PIN_OE   D1   // GPIO5  → OE  (Output Enable, active LOW)
+#define PIN_A    D2   // GPIO4  → A   (Row address bit 0)
+#define PIN_B    D3   // GPIO0  → B   (Row address bit 1)
+#define PIN_CLK  D5   // GPIO14 → F   (Clock)
+#define PIN_STB  D8   // GPIO15 → S   (Strobe / Latch)
+#define PIN_DATA D7   // GPIO13 → R   (Serial data)
 
 // ── Matrix dimensions ─────────────────────────────────────────────────
 #define COLS        16
@@ -107,6 +108,7 @@ char poss='N';
 
 // ── Timing ────────────────────────────────────────────────────────────
 unsigned long lastFetch=0, lastPing=0;
+WiFiClient wifiClient;
 
 // ─────────────────────────────────────────────────────────────────────
 void setup() {
@@ -305,7 +307,7 @@ void clearFB() { memset(fb,0,sizeof(fb)); }
 void fetchState() {
   String url = String("http://")+SERVER_IP+":"+SERVER_PORT+"/state";
   HTTPClient http;
-  http.begin(url);
+  http.begin(wifiClient, url);
   http.setTimeout(800);
   if (http.GET() != 200) { http.end(); return; }
   String body = http.getString();
@@ -336,7 +338,7 @@ void fetchState() {
 void sendPing() {
   String url = String("http://")+SERVER_IP+":"+SERVER_PORT+"/ping";
   HTTPClient http;
-  http.begin(url);
+  http.begin(wifiClient, url);
   http.addHeader("Content-Type","application/json");
   http.POST("{}");
   http.end();
