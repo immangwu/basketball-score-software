@@ -1,31 +1,56 @@
 /*
-  LED Matrix Test — NodeMCU + HUB12  16 rows × 32 columns  1/8 scan
-  ==================================================================
-  No WiFi needed. Upload and watch the panel.
-  Serial Monitor at 115200 baud.
+  Number Display Test — NodeMCU + 16×32 LED Matrix
+  =================================================
+  Shows numbers 1 to 10 one by one, each for 2 seconds.
+  Tests two font sizes — watch which one looks cleaner.
 
-  Wiring:
-    D1 → OE    D2 → A    D3 → B    D4 → C (Pin 10 / L on board)
-    D5 → CLK   D8 → STB  D7 → DATA
-    GND → Panel N,  5V supply → Panel VCC,  Supply GND → NodeMCU GND
+  No WiFi needed. Just upload and observe.
+  Serial Monitor at 115200 baud.
 */
 
 #define PIN_OE   D1
 #define PIN_A    D2
 #define PIN_B    D3
-#define PIN_C    D4   // Panel pin 10 (L) → D4
+#define PIN_C    D4
 #define PIN_CLK  D5
 #define PIN_STB  D8
 #define PIN_DATA D7
 
-#define ROWS        16
-#define COLS        32   // 32 columns
-#define BYTES_PER_ROW 4  // 32 cols / 8 bits = 4 bytes
-#define SCAN_LINES   8   // 1/8 scan
+#define ROWS          16
+#define COLS          32
+#define BYTES_PER_ROW  4
+#define SCAN_LINES     8
 
-// Frame buffer: [row][4 bytes for 32 columns]
 byte fb[ROWS][BYTES_PER_ROW];
 byte scanStep = 0;
+
+// ── 5×7 font (large) ──────────────────────────────────────────────────
+const byte F5[10][7] = {
+  {0b11111000,0b10001000,0b10001000,0b10001000,0b10001000,0b10001000,0b11111000}, // 0
+  {0b00100000,0b01100000,0b00100000,0b00100000,0b00100000,0b00100000,0b01110000}, // 1
+  {0b11111000,0b00001000,0b00001000,0b11111000,0b10000000,0b10000000,0b11111000}, // 2
+  {0b11111000,0b00001000,0b00001000,0b11111000,0b00001000,0b00001000,0b11111000}, // 3
+  {0b10001000,0b10001000,0b10001000,0b11111000,0b00001000,0b00001000,0b00001000}, // 4
+  {0b11111000,0b10000000,0b10000000,0b11111000,0b00001000,0b00001000,0b11111000}, // 5
+  {0b11111000,0b10000000,0b10000000,0b11111000,0b10001000,0b10001000,0b11111000}, // 6
+  {0b11111000,0b00001000,0b00010000,0b00100000,0b01000000,0b01000000,0b01000000}, // 7
+  {0b11111000,0b10001000,0b10001000,0b11111000,0b10001000,0b10001000,0b11111000}, // 8
+  {0b11111000,0b10001000,0b10001000,0b11111000,0b00001000,0b00001000,0b11111000}, // 9
+};
+
+// ── 3×5 font (small) ──────────────────────────────────────────────────
+const byte F3[10][5] = {
+  {0b11100000,0b10100000,0b10100000,0b10100000,0b11100000}, // 0
+  {0b01000000,0b11000000,0b01000000,0b01000000,0b11100000}, // 1
+  {0b11100000,0b00100000,0b11100000,0b10000000,0b11100000}, // 2
+  {0b11100000,0b00100000,0b11100000,0b00100000,0b11100000}, // 3
+  {0b10100000,0b10100000,0b11100000,0b00100000,0b00100000}, // 4
+  {0b11100000,0b10000000,0b11100000,0b00100000,0b11100000}, // 5
+  {0b11100000,0b10000000,0b11100000,0b10100000,0b11100000}, // 6
+  {0b11100000,0b00100000,0b01000000,0b01000000,0b01000000}, // 7
+  {0b11100000,0b10100000,0b11100000,0b10100000,0b11100000}, // 8
+  {0b11100000,0b10100000,0b11100000,0b00100000,0b11100000}, // 9
+};
 
 void setup() {
   Serial.begin(115200);
@@ -37,87 +62,101 @@ void setup() {
   pinMode(PIN_STB,  OUTPUT);
   pinMode(PIN_DATA, OUTPUT);
   digitalWrite(PIN_OE, HIGH);
-
-  Serial.println("\n=== LED Matrix Test  16x32 ===");
+  Serial.println("Number test starting...");
 }
 
 void loop() {
-  Serial.println("TEST 1: All LEDs ON");
-  fillAll(0xFF);
-  runScan(3000);
-
-  Serial.println("TEST 2: All LEDs OFF");
-  fillAll(0x00);
-  runScan(1000);
-
-  Serial.println("TEST 3: Checkerboard");
-  for (int r = 0; r < ROWS; r++)
-    for (int b = 0; b < BYTES_PER_ROW; b++)
-      fb[r][b] = (r % 2 == 0) ? 0b10101010 : 0b01010101;
-  runScan(3000);
-
-  Serial.println("TEST 4: Rows one by one");
-  for (int r = 0; r < ROWS; r++) {
-    memset(fb, 0, sizeof(fb));
-    for (int b = 0; b < BYTES_PER_ROW; b++) fb[r][b] = 0xFF;
-    Serial.printf("  Row %d\n", r);
-    runScan(400);
+  // Show 1 to 10 with LARGE font (5×7), centred
+  Serial.println("--- LARGE font (5x7) ---");
+  for (int n = 1; n <= 10; n++) {
+    clearFB();
+    if (n < 10) {
+      // Single digit — draw centred (col 13)
+      drawLarge(n, 4, 13);
+    } else {
+      // "10" — two digits side by side (cols 9 and 15)
+      drawLarge(1, 4, 9);
+      drawLarge(0, 4, 16);
+    }
+    Serial.printf("Large: %d\n", n);
+    runScan(2000);
   }
 
-  Serial.println("TEST 5: Columns one by one");
-  for (int c = 0; c < COLS; c++) {
-    memset(fb, 0, sizeof(fb));
-    for (int r = 0; r < ROWS; r++)
-      fb[r][c / 8] |= (0x80 >> (c % 8));
-    Serial.printf("  Col %d\n", c);
-    runScan(200);
+  // Show 1 to 10 with SMALL font (3×5), centred
+  Serial.println("--- SMALL font (3x5) ---");
+  for (int n = 1; n <= 10; n++) {
+    clearFB();
+    if (n < 10) {
+      // Single digit centred (col 14)
+      drawSmall(n, 5, 14);
+    } else {
+      // "10" — two digits (cols 12 and 16)
+      drawSmall(1, 5, 12);
+      drawSmall(0, 5, 17);
+    }
+    Serial.printf("Small: %d\n", n);
+    runScan(2000);
   }
 
-  Serial.println("--- Cycle done, repeating ---\n");
+  Serial.println("--- Cycle done ---\n");
 }
+
+// Draw 5×7 digit at (row, col)
+void drawLarge(int d, int row, int col) {
+  d = constrain(d, 0, 9);
+  for (int r = 0; r < 7; r++) {
+    byte px = (F5[d][r] >> 3) & 0x1F;
+    for (int c = 0; c < 5; c++)
+      if (px & (1 << (4-c))) setPixel(row+r, col+c);
+  }
+}
+
+// Draw 3×5 digit at (row, col)
+void drawSmall(int d, int row, int col) {
+  d = constrain(d, 0, 9);
+  for (int r = 0; r < 5; r++) {
+    byte px = (F3[d][r] >> 5) & 0x07;
+    for (int c = 0; c < 3; c++)
+      if (px & (1 << (2-c))) setPixel(row+r, col+c);
+  }
+}
+
+void setPixel(int row, int col) {
+  if (row<0||row>=ROWS||col<0||col>=COLS) return;
+  fb[row][col/8] |= (0x80 >> (col%8));
+}
+
+void clearFB() { memset(fb, 0, sizeof(fb)); }
 
 void runScan(int ms) {
   unsigned long end = millis() + ms;
   while (millis() < end) scanMatrix();
 }
 
-void fillAll(byte val) {
-  for (int r = 0; r < ROWS; r++)
-    for (int b = 0; b < BYTES_PER_ROW; b++)
-      fb[r][b] = val;
-}
-
 void scanMatrix() {
   static unsigned long t = 0;
-  if (micros() - t < 2000) return;
+  if (micros() - t < 1000) return;
   t = micros();
 
   digitalWrite(PIN_OE, HIGH);
-
-  // 1/8 scan: step drives row[scanStep] and row[scanStep+8]
-  // Shift bottom row first (scanStep+8), then top row (scanStep)
-  // Each row = 4 bytes, shifted MSB first, last byte = leftmost cols
-  for (int b = 0; b < BYTES_PER_ROW; b++)
-    shiftByte(fb[scanStep][b]);
-  for (int b = 0; b < BYTES_PER_ROW; b++)
-    shiftByte(fb[scanStep+8][b]);
+  for (int b = 0; b < BYTES_PER_ROW; b++) shiftByte(fb[scanStep][b]);
+  for (int b = 0; b < BYTES_PER_ROW; b++) shiftByte(fb[scanStep+8][b]);
 
   digitalWrite(PIN_STB, HIGH);
   delayMicroseconds(1);
   digitalWrite(PIN_STB, LOW);
 
-  digitalWrite(PIN_A, (scanStep >> 0) & 1);
-  digitalWrite(PIN_B, (scanStep >> 1) & 1);
-  digitalWrite(PIN_C, (scanStep >> 2) & 1);
-
+  digitalWrite(PIN_A, (scanStep>>0)&1);
+  digitalWrite(PIN_B, (scanStep>>1)&1);
+  digitalWrite(PIN_C, (scanStep>>2)&1);
   digitalWrite(PIN_OE, LOW);
 
-  scanStep = (scanStep + 1) % SCAN_LINES;
+  scanStep = (scanStep+1) % SCAN_LINES;
 }
 
 inline void shiftByte(byte b) {
-  for (int i = 7; i >= 0; i--) {
-    digitalWrite(PIN_DATA, (b >> i) & 1);
+  for (int i=7; i>=0; i--) {
+    digitalWrite(PIN_DATA, (b>>i)&1);
     digitalWrite(PIN_CLK, HIGH);
     delayMicroseconds(1);
     digitalWrite(PIN_CLK, LOW);
