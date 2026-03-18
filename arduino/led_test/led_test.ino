@@ -8,13 +8,13 @@
   Serial Monitor at 115200 baud.
 */
 
-#define PIN_OE   D1
-#define PIN_A    D2
-#define PIN_B    D3
-#define PIN_C    D4
-#define PIN_CLK  D5
-#define PIN_STB  D8
-#define PIN_DATA D7
+#define PIN_OE   D0
+#define PIN_A    D1
+#define PIN_B    D2
+#define PIN_C    D3
+#define PIN_CLK  D4
+#define PIN_STB  D5
+#define PIN_DATA D6
 
 #define ROWS          16
 #define COLS          32
