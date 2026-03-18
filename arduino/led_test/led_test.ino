@@ -97,10 +97,10 @@ void scanMatrix() {
   // 1/8 scan: step drives row[scanStep] and row[scanStep+8]
   // Shift bottom row first (scanStep+8), then top row (scanStep)
   // Each row = 4 bytes, shifted MSB first, last byte = leftmost cols
-  for (int b = BYTES_PER_ROW - 1; b >= 0; b--)
-    shiftByte(fb[scanStep + 8][b]);
-  for (int b = BYTES_PER_ROW - 1; b >= 0; b--)
+  for (int b = 0; b < BYTES_PER_ROW; b++)
     shiftByte(fb[scanStep][b]);
+  for (int b = 0; b < BYTES_PER_ROW; b++)
+    shiftByte(fb[scanStep+8][b]);
 
   digitalWrite(PIN_STB, HIGH);
   delayMicroseconds(1);
