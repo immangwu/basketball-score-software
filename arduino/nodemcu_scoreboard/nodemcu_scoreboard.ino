@@ -1,38 +1,44 @@
 /*
   =====================================================================
-  Basketball Scoreboard — NodeMCU + 16×16 LED Matrix (HUB12, 1/4 scan)
+  Basketball Scoreboard — ESP32 + 16×16 LED Matrix (HUB12, 1/4 scan)
   HIVE · Sri Ramakrishna Institute of Technology
   =====================================================================
 
   EXACT WIRING from board photo labels:
   ─────────────────────────────────────────────────────────────────────
-  HUB12 Board Pin │ Label │ NodeMCU Pin │ GPIO
-  ────────────────┼───────┼─────────────┼──────
-  Pin  1 (left 1) │  OE   │     D1      │ GPIO5
-  Pin  2 (right 1)│   A   │     D2      │ GPIO4
-  Pin  3 (left 2) │   N   │    GND      │ GND
-  Pin  4 (right 2)│   B   │     D3      │ GPIO0
-  Pin  5 (left 3) │   N   │    GND      │ GND
-  Pin  6 (right 3)│   F   │     D5      │ GPIO14  ← CLK
-  Pin  7 (left 4) │   N   │    GND      │ GND
-  Pin  8 (right 4)│   S   │     D8      │ GPIO15  ← STB/LAT
-  Pin  9 (left 5) │   N   │    GND      │ GND
-  Pin 10 (right 5)│   L   │   (skip)    │ —       ← not used
-  Pin 11 (left 6) │   N   │    GND      │ GND
-  Pin 12 (right 6)│   R   │     D7      │ GPIO13  ← DATA
-  Pin 13 (left 7) │   N   │    GND      │ GND
-  Pin 14 (right 7)│   F   │   (skip)    │ —       ← not used
-  Pin 15 (left 8) │   N   │    GND      │ GND
-  Pin 16 (right 8)│   N   │    GND      │ GND
+  HUB12 Board Pin │ Label │ ESP32 Pin │ GPIO
+  ────────────────┼───────┼───────────┼──────
+  Pin  1 (left 1) │  OE   │   GPIO4   │ GPIO4   ← Output Enable
+  Pin  2 (right 1)│   A   │  GPIO16   │ GPIO16  ← Row address bit 0
+  Pin  3 (left 2) │   N   │   GND     │ GND
+  Pin  4 (right 2)│   B   │  GPIO17   │ GPIO17  ← Row address bit 1
+  Pin  5 (left 3) │   N   │   GND     │ GND
+  Pin  6 (right 3)│   F   │  GPIO18   │ GPIO18  ← CLK (VSPI CLK)
+  Pin  7 (left 4) │   N   │   GND     │ GND
+  Pin  8 (right 4)│   S   │   GPIO5   │ GPIO5   ← STB/LAT
+  Pin  9 (left 5) │   N   │   GND     │ GND
+  Pin 10 (right 5)│   L   │  (skip)   │ —
+  Pin 11 (left 6) │   N   │   GND     │ GND
+  Pin 12 (right 6)│   R   │  GPIO23   │ GPIO23  ← DATA (VSPI MOSI)
+  Pin 13 (left 7) │   N   │   GND     │ GND
+  Pin 14 (right 7)│   F   │  (skip)   │ —
+  Pin 15 (left 8) │   N   │   GND     │ GND
+  Pin 16 (right 8)│   N   │   GND     │ GND
   ─────────────────────────────────────────────────────────────────────
   POWER:
     LED Panel VCC (5V rail on board) → External 5V 3A power supply +
     LED Panel GND                    → External 5V supply GND
-    NodeMCU GND                      → Same external 5V supply GND
-    (COMMON GROUND between NodeMCU and panel supply is REQUIRED)
+    ESP32 GND                        → Same external 5V supply GND
+    (COMMON GROUND between ESP32 and panel supply is REQUIRED)
 
-  NodeMCU powered separately via USB.
+  ESP32 powered separately via USB.
   ─────────────────────────────────────────────────────────────────────
+  ARDUINO IDE BOARD SETUP:
+    Board  : ESP32 Dev Module
+    Port   : COMx (whichever appears when ESP32 is plugged in)
+    Add boards URL in File → Preferences:
+    https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
   SCAN MODE: 1/4 scan (confirmed: only A and B address pins on board)
     Step 0 (A=0,B=0): rows  0, 4,  8, 12 active together
     Step 1 (A=1,B=0): rows  1, 5,  9, 13 active together
@@ -51,10 +57,9 @@
   LIBRARY: ArduinoJson v6.x (Sketch → Manage Libraries → ArduinoJson)
 */
 
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <WiFiClient.h>
 
 // ── WiFi & Server ─────────────────────────────────────────────────────
 const char* WIFI_SSID   = "HIVE";
@@ -62,13 +67,13 @@ const char* WIFI_PASS   = "hive@srit2024";
 const char* SERVER_IP   = "172.16.50.85";
 const int   SERVER_PORT = 8765;
 
-// ── HUB12 Pins (matched to board photo labels) ────────────────────────
-#define PIN_OE   D1   // GPIO5  → OE  (Output Enable, active LOW)
-#define PIN_A    D2   // GPIO4  → A   (Row address bit 0)
-#define PIN_B    D3   // GPIO0  → B   (Row address bit 1)
-#define PIN_CLK  D5   // GPIO14 → F   (Clock)
-#define PIN_STB  D8   // GPIO15 → S   (Strobe / Latch)
-#define PIN_DATA D7   // GPIO13 → R   (Serial data)
+// ── HUB12 Pins — ESP32 GPIO numbers (matched to board photo labels) ──
+#define PIN_OE    4   // GPIO4  → OE  (Output Enable, active LOW)
+#define PIN_A    16   // GPIO16 → A   (Row address bit 0)
+#define PIN_B    17   // GPIO17 → B   (Row address bit 1)
+#define PIN_CLK  18   // GPIO18 → F   (Clock — VSPI CLK)
+#define PIN_STB   5   // GPIO5  → S   (Strobe / Latch)
+#define PIN_DATA 23   // GPIO23 → R   (Serial data — VSPI MOSI)
 
 // ── Matrix dimensions ─────────────────────────────────────────────────
 #define COLS        16
@@ -102,7 +107,6 @@ char poss='N';
 
 // ── Timing ────────────────────────────────────────────────────────────
 unsigned long lastFetch=0, lastPing=0;
-WiFiClient wifiClient;
 
 // ─────────────────────────────────────────────────────────────────────
 void setup() {
@@ -301,7 +305,7 @@ void clearFB() { memset(fb,0,sizeof(fb)); }
 void fetchState() {
   String url = String("http://")+SERVER_IP+":"+SERVER_PORT+"/state";
   HTTPClient http;
-  http.begin(wifiClient, url);
+  http.begin(url);
   http.setTimeout(800);
   if (http.GET() != 200) { http.end(); return; }
   String body = http.getString();
@@ -332,7 +336,7 @@ void fetchState() {
 void sendPing() {
   String url = String("http://")+SERVER_IP+":"+SERVER_PORT+"/ping";
   HTTPClient http;
-  http.begin(wifiClient, url);
+  http.begin(url);
   http.addHeader("Content-Type","application/json");
   http.POST("{}");
   http.end();
