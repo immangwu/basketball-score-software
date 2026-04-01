@@ -1,98 +1,121 @@
 /*
-  SIMPLE ON/OFF TEST — NodeMCU 16×32 HUB12
-  ==========================================
-  Every 3 seconds alternates ALL OFF → ALL ON
-  Serial Monitor 115200 baud.
+  P10 Board Hardware Test — DMD2 Library
+  ========================================
+  Tests the panel step by step.
+  Watch Serial Monitor at 9600 baud for status.
 
-  If panel shows:
-    ALL OFF then ALL ON → wiring is correct, inversion fixed
-    ALL ON  always      → OE pin issue or address issue
-    No change           → data not reaching panel
+  Board   : Arduino UNO
+  Library : DMD2 by Freetronics
+
+  WIRING:
+    Panel CLK  → Arduino Pin 13
+    Panel DATA → Arduino Pin 11
+    Panel STB  → Arduino Pin 9
+    Panel OE   → Arduino Pin 6
+    Panel A    → Arduino Pin 7
+    Panel B    → Arduino Pin 8
+    Panel GND  → Arduino GND + 5V Supply GND
+    Panel VCC  → 5V Supply (+)
 */
 
-#define PIN_OE   D0
-#define PIN_A    D1
-#define PIN_B    D2
-#define PIN_C    D3
-#define PIN_CLK  D4
-#define PIN_STB  D5
-#define PIN_DATA D6
+#include <SPI.h>
+#include <DMD2.h>
+#include <fonts/SystemFont5x7.h>
 
-#define SCAN_LINES     8
-#define BYTES_PER_ROW  4
-
-byte scanStep = 0;
-bool allOn = false;
+SoftDMD dmd(1, 1);
 
 void setup() {
-  Serial.begin(115200);
-  pinMode(PIN_OE,   OUTPUT);
-  pinMode(PIN_A,    OUTPUT);
-  pinMode(PIN_B,    OUTPUT);
-  pinMode(PIN_C,    OUTPUT);
-  pinMode(PIN_CLK,  OUTPUT);
-  pinMode(PIN_STB,  OUTPUT);
-  pinMode(PIN_DATA, OUTPUT);
-
-  // Force OE HIGH immediately (disable output)
-  digitalWrite(PIN_OE, HIGH);
-  digitalWrite(PIN_STB, LOW);
-  digitalWrite(PIN_CLK, LOW);
-
-  Serial.println("Simple ON/OFF test");
-  Serial.println("Watch panel — should alternate OFF and ON every 3 seconds");
+  Serial.begin(9600);
+  dmd.setBrightness(255);
+  dmd.begin();
+  Serial.println("=== P10 Board Test ===");
 }
+
+int testNum = 0;
+unsigned long lastTest = 0;
 
 void loop() {
-  // Toggle every 3 seconds
-  static unsigned long lastToggle = 0;
-  if (millis() - lastToggle > 3000) {
-    lastToggle = millis();
-    allOn = !allOn;
-    Serial.println(allOn ? "ALL ON" : "ALL OFF");
+  if (millis() - lastTest < 2500) return;
+  lastTest = millis();
+
+  dmd.clearScreen();
+
+  switch (testNum) {
+
+    case 0:
+      // ALL LEDs ON — entire panel should glow
+      Serial.println("TEST 1: ALL LEDs ON — full panel bright?");
+      for (int x = 0; x < 32; x++)
+        for (int y = 0; y < 16; y++)
+          dmd.setPixel(x, y, GRAPHICS_ON);
+      break;
+
+    case 1:
+      // ALL LEDs OFF — panel should be blank
+      Serial.println("TEST 2: ALL LEDs OFF — panel blank?");
+      dmd.clearScreen();
+      break;
+
+    case 2:
+      // TOP HALF only (rows 0–7)
+      Serial.println("TEST 3: TOP HALF rows 0-7 ON");
+      for (int x = 0; x < 32; x++)
+        for (int y = 0; y < 8; y++)
+          dmd.setPixel(x, y, GRAPHICS_ON);
+      break;
+
+    case 3:
+      // BOTTOM HALF only (rows 8–15)
+      Serial.println("TEST 4: BOTTOM HALF rows 8-15 ON");
+      for (int x = 0; x < 32; x++)
+        for (int y = 8; y < 16; y++)
+          dmd.setPixel(x, y, GRAPHICS_ON);
+      break;
+
+    case 4:
+      // LEFT HALF only (cols 0–15)
+      Serial.println("TEST 5: LEFT HALF cols 0-15 ON");
+      for (int x = 0; x < 16; x++)
+        for (int y = 0; y < 16; y++)
+          dmd.setPixel(x, y, GRAPHICS_ON);
+      break;
+
+    case 5:
+      // RIGHT HALF only (cols 16–31)
+      Serial.println("TEST 6: RIGHT HALF cols 16-31 ON");
+      for (int x = 16; x < 32; x++)
+        for (int y = 0; y < 16; y++)
+          dmd.setPixel(x, y, GRAPHICS_ON);
+      break;
+
+    case 6:
+      // CHECKERBOARD
+      Serial.println("TEST 7: CHECKERBOARD pattern");
+      for (int x = 0; x < 32; x++)
+        for (int y = 0; y < 16; y++)
+          if ((x + y) % 2 == 0) dmd.setPixel(x, y, GRAPHICS_ON);
+      break;
+
+    case 7:
+      // BORDER only
+      Serial.println("TEST 8: BORDER (outer edge only)");
+      for (int x = 0; x < 32; x++) {
+        dmd.setPixel(x, 0,  GRAPHICS_ON);
+        dmd.setPixel(x, 15, GRAPHICS_ON);
+      }
+      for (int y = 0; y < 16; y++) {
+        dmd.setPixel(0,  y, GRAPHICS_ON);
+        dmd.setPixel(31, y, GRAPHICS_ON);
+      }
+      break;
+
+    case 8:
+      // Display "OK" text
+      Serial.println("TEST 9: Display text OK");
+      dmd.selectFont(SystemFont5x7);
+      dmd.drawString(5, 4, "OK");
+      break;
   }
 
-  // Continuously scan all 8 row steps
-  scanRow(allOn);
-}
-
-void scanRow(bool on) {
-  static unsigned long t = 0;
-  if (micros() - t < 1000) return;
-  t = micros();
-
-  digitalWrite(PIN_OE, HIGH);   // disable output while shifting
-
-  // active-LOW panel:
-  //   shift 0x00 = all LEDs ON
-  //   shift 0xFF = all LEDs OFF
-  byte val = on ? 0x00 : 0xFF;
-
-  // Shift 8 bytes (4 bytes top row + 4 bytes bottom row)
-  for (int b = 0; b < BYTES_PER_ROW; b++) shiftByte(val);
-  for (int b = 0; b < BYTES_PER_ROW; b++) shiftByte(val);
-
-  // Latch
-  digitalWrite(PIN_STB, HIGH);
-  delayMicroseconds(1);
-  digitalWrite(PIN_STB, LOW);
-
-  // Set row address
-  digitalWrite(PIN_A, (scanStep >> 0) & 1);
-  digitalWrite(PIN_B, (scanStep >> 1) & 1);
-  digitalWrite(PIN_C, (scanStep >> 2) & 1);
-
-  // Enable output
-  digitalWrite(PIN_OE, LOW);
-
-  scanStep = (scanStep + 1) % SCAN_LINES;
-}
-
-inline void shiftByte(byte b) {
-  for (int i = 7; i >= 0; i--) {
-    digitalWrite(PIN_DATA, (b >> i) & 1);
-    digitalWrite(PIN_CLK, HIGH);
-    delayMicroseconds(1);
-    digitalWrite(PIN_CLK, LOW);
-  }
+  testNum = (testNum + 1) % 9;
 }
